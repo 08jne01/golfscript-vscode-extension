@@ -15,130 +15,187 @@
 
 'use strict';
 
-import * as Net from 'net';
+
 import * as vscode from 'vscode';
-import { randomBytes } from 'crypto';
-import { tmpdir } from 'os';
-import { join } from 'path';
-import { platform } from 'process';
+
 import { ProviderResult } from 'vscode';
-import { MockDebugSession } from './mockDebug';
-import { activateMockDebug, workspaceFileAccessor } from './activateMockDebug';
+import * as Net from 'net';
 
-/*
- * The compile time flag 'runMode' controls how the debug adapter is run.
- * Please note: the test suite only supports 'external' mode.
- */
-const runMode: 'external' | 'server' | 'namedPipeServer' | 'inline' = 'inline';
+let outputChannel: vscode.OutputChannel;
+let outputTerminal: vscode.Terminal | undefined;
 
-export function activate(context: vscode.ExtensionContext) {
+function startDebugging(path, noDebug: boolean | false)
+{
 
-	// debug adapters can be run in different ways by using a vscode.DebugAdapterDescriptorFactory:
-	switch (runMode) {
-		case 'server':
-			// run the debug adapter as a server inside the extension and communicate via a socket
-			activateMockDebug(context, new MockDebugAdapterServerDescriptorFactory());
-			break;
-
-		case 'namedPipeServer':
-			// run the debug adapter as a server inside the extension and communicate via a named pipe (Windows) or UNIX domain socket (non-Windows)
-			activateMockDebug(context, new MockDebugAdapterNamedPipeServerDescriptorFactory());
-			break;
-
-		case 'external': default:
-			// run the debug adapter as a separate process
-			activateMockDebug(context, new DebugAdapterExecutableFactory());
-			break;
-
-		case 'inline':
-			// run the debug adapter inside the extension and directly talk to it
-			activateMockDebug(context);
-			break;
+	let config = {
+		type: 'golfscript',
+		name: 'Run file',
+		request: 'launch',
+		program: path
 	}
+
+	if (!noDebug)
+	{
+		config["stopOnEntry"] = true;
+	}
+
+	vscode.debug.startDebugging(undefined, config, { noDebug: noDebug });
 }
 
-export function deactivate() {
+export function activate(context: vscode.ExtensionContext) 
+{
+	outputChannel = vscode.window.createOutputChannel('Golfscript');
+
+	console.log(outputChannel);
+	context.subscriptions.push(vscode.debug.registerDebugConfigurationProvider('golfscript', new GolfscriptInitialConfigurationProvider));
+	context.subscriptions.push(vscode.debug.registerDebugAdapterDescriptorFactory('golfscript', new GolfscriptDebugAdapterDescriptorFactory()));
+	context.subscriptions.push(vscode.debug.registerDebugAdapterTrackerFactory('golfscript', new GolfscriptDebugAdapterTrackerFactory()));
+
+	context.subscriptions.push(vscode.commands.registerCommand('golfscript-debug.runEditorContents', (resource: vscode.Uri) =>
+	{
+		let target = resource;
+		if (!target && vscode.window.activeTextEditor)
+		{
+			target = vscode.window.activeTextEditor.document.uri;
+		}
+
+		if (target)
+		{
+			startDebugging(target.fsPath, true);
+		}
+	}));
+
+
+	context.subscriptions.push(vscode.commands.registerCommand('golfscript-debug.debugEditorContents', (resource: vscode.Uri) =>
+	{
+		let target = resource;
+		if (!target && vscode.window.activeTextEditor)
+		{
+			target = vscode.window.activeTextEditor.document.uri;
+		}
+
+		if (target)
+		{
+			startDebugging(target.fsPath, false);
+		}
+	}));
+
+
+
+
+
+}
+
+export function deactivate()
+{
 	// nothing to do
 }
 
-class DebugAdapterExecutableFactory implements vscode.DebugAdapterDescriptorFactory {
+class GolfscriptInitialConfigurationProvider implements vscode.DebugConfigurationProvider
+{
+	resolveDebugConfiguration(folder: vscode.WorkspaceFolder | undefined, config: vscode.DebugConfiguration, token?: vscode.CancellationToken): ProviderResult<vscode.DebugConfiguration>
+	{
+		if (config.script || config.request === 'attach')
+		{
+			return config;
+		}
+
+		return {
+			type: 'golfscript',
+			name: 'Launch',
+			request: 'launch',
+			script: '${file}',
+			askParameters: true,
+		};
+	}
+}
+
+class GolfscriptDebugAdapterDescriptorFactory implements vscode.DebugAdapterDescriptorFactory
+{
 
 	// The following use of a DebugAdapter factory shows how to control what debug adapter executable is used.
 	// Since the code implements the default behavior, it is absolutely not neccessary and we show it here only for educational purpose.
 
-	createDebugAdapterDescriptor(_session: vscode.DebugSession, executable: vscode.DebugAdapterExecutable | undefined): ProviderResult<vscode.DebugAdapterDescriptor> {
-		// param "executable" contains the executable optionally specified in the package.json (if any)
+	createDebugAdapterDescriptor(session: vscode.DebugSession, executable: vscode.DebugAdapterExecutable | undefined): Promise<vscode.DebugAdapterDescriptor>
+	{
+		let result = new Promise<vscode.DebugAdapterServer>((resolve, reject) =>
+		{
+			const port = 65432;
+			const ip = "127.0.0.1";
+			let client = new Net.Socket();
+			let retries = 5;
 
-		// use the executable specified in the package.json if it exists or determine it based on some other information (e.g. the session)
-		if (!executable) {
-			const command = "absolute path to my DA executable";
-			const args = [
-				"some args",
-				"another arg"
-			];
-			const options = {
-				cwd: "working directory for executable",
-				env: { "envVariable": "some value" }
+			client.on('connect', () =>
+			{
+				outputChannel.appendLine("Server is running");
+				client.end();
+				client.destroy();
+
+				setTimeout(() =>
+				{
+					resolve(new vscode.DebugAdapterServer(65432, "127.0.0.1"));
+				}, 1000); //resolve after 4 seconds
+			});
+
+			client.connect(port, ip);
+
+			client.on('error', (error) =>
+			{
+				retries--;
+
+				if (retries < 0)
+				{
+					reject("Could not connect to debug adapter");
+				}
+				else
+				{
+					outputChannel.appendLine("Refused: retrying...");
+					setTimeout(() =>
+					{
+						client.connect(port, ip);
+					}, 1000);
+				}
+			});
+		});
+
+		return result;
+	}
+}
+
+class GolfscriptDebugAdapterTrackerFactory implements vscode.DebugAdapterTrackerFactory
+{
+	createDebugAdapterTracker(session: vscode.DebugSession): ProviderResult<vscode.DebugAdapterTracker>
+	{
+		const tracker: vscode.DebugAdapterTracker = {
+			onWillStartSession(): void
+			{
+				outputChannel.appendLine("[Start session]\n" + JSON.stringify(session, null, 2));
+			},
+			onWillStopSession(): void
+			{
+				if (outputTerminal)
+				{
+					outputTerminal.show();
+				}
+			},
+			onError(e)
+			{
+				outputChannel.appendLine("[Error on session]\n" + e.name + ": " + e.message + "\nerror: " + JSON.stringify(e, null, 2));
+			}
+		};
+
+		if (true || session.configuration.showProtocalLog)
+		{
+			tracker.onDidSendMessage = (message: any): void => 
+			{
+				outputChannel.appendLine("[DebugAdapter->VSCode] " + JSON.stringify(message, null, 2));
 			};
-			executable = new vscode.DebugAdapterExecutable(command, args, options);
+
+			tracker.onWillReceiveMessage = (message: any): void =>
+			{
+				outputChannel.appendLine("[VSCode->DebugAdapter] " + JSON.stringify(message, null, 2));
+			};
 		}
-
-		// make VS Code launch the DA executable
-		return executable;
-	}
-}
-
-class MockDebugAdapterServerDescriptorFactory implements vscode.DebugAdapterDescriptorFactory {
-
-	private server?: Net.Server;
-
-	createDebugAdapterDescriptor(session: vscode.DebugSession, executable: vscode.DebugAdapterExecutable | undefined): vscode.ProviderResult<vscode.DebugAdapterDescriptor> {
-
-		if (!this.server) {
-			// start listening on a random port
-			this.server = Net.createServer(socket => {
-				const session = new MockDebugSession(workspaceFileAccessor);
-				session.setRunAsServer(true);
-				session.start(socket as NodeJS.ReadableStream, socket);
-			}).listen(0);
-		}
-
-		// make VS Code connect to debug server
-		return new vscode.DebugAdapterServer((this.server.address() as Net.AddressInfo).port);
-	}
-
-	dispose() {
-		if (this.server) {
-			this.server.close();
-		}
-	}
-}
-
-class MockDebugAdapterNamedPipeServerDescriptorFactory implements vscode.DebugAdapterDescriptorFactory {
-
-	private server?: Net.Server;
-
-	createDebugAdapterDescriptor(session: vscode.DebugSession, executable: vscode.DebugAdapterExecutable | undefined): vscode.ProviderResult<vscode.DebugAdapterDescriptor> {
-
-		if (!this.server) {
-			// start listening on a random named pipe path
-			const pipeName = randomBytes(10).toString('utf8');
-			const pipePath = platform === "win32" ? join('\\\\.\\pipe\\', pipeName) : join(tmpdir(), pipeName);
-
-			this.server = Net.createServer(socket => {
-				const session = new MockDebugSession(workspaceFileAccessor);
-				session.setRunAsServer(true);
-				session.start(<NodeJS.ReadableStream>socket, socket);
-			}).listen(pipePath);
-		}
-
-		// make VS Code connect to debug server
-		return new vscode.DebugAdapterNamedPipeServer(this.server.address() as string);
-	}
-
-	dispose() {
-		if (this.server) {
-			this.server.close();
-		}
+		return tracker;
 	}
 }

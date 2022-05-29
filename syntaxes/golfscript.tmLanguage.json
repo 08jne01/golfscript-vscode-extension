@@ -1,0 +1,151 @@
+{
+    "scopeName": "source.golfscript",
+    "patterns": [
+        {
+            "include": "#expression"
+        }
+    ],
+    "repository": {
+        "expression": {
+            "patterns": [
+                {
+                    "include": "#flow"
+                },
+                {
+                    "include": "#control-block"
+                },
+                {
+                    "include": "#assignment"
+                },
+                {
+                    "include": "#comment"
+                },
+                {
+                    "include": "#constant"
+                },
+                {
+                    "include": "#constant-numeric"
+                },
+                {
+                    "include": "#string-single"
+                },
+                {
+                    "include": "#string-double"
+                },
+                {
+                    "include": "#array"
+                },
+                {
+                    "include": "#variables"
+                },
+                {
+                    "include": "#single-variables"
+                }
+            ]
+        },
+        "assignment": {
+            "match": ":",
+            "name": "keyword.operator.assignment"
+        },
+        "single-variables": {
+            "match": "[\\~\\`\\!\\@\\$\\+\\-\\*\\/\\%\\|\\&\\^\\;\\<\\>\\=\\,\\.\\?\\(\\)\\\\]",
+            "name": "support.function"
+        },
+        "variables": {
+            "match": "and|or|xor|print|p|puts|rand|abs|zip|base",
+            "name": "support.function"
+        },
+        "constant": {
+            "match": "n",
+            "name": "constant.character"
+        },
+        "constant-numeric": {
+            "match": "[0-9]",
+            "name": "constant.numeric"
+        },
+        "flow": {
+            "match": "if|while|do|until",
+            "name": "keyword.control.flow"
+        },
+        "comment": {
+            "begin": "\\#",
+            "end": "\\\n",
+            "beginCaptures": {
+                "0": {
+                    "name": "comment.line"
+                }
+            },
+            "name": "comment.line.number-sign"
+        },
+        "control-block": {
+            "begin": "\\{",
+            "end": "\\}",
+            "beginCaptures": {
+                "0": {
+                    "name": "punctuation.definition.block"
+                }
+            },
+            "endCaptures": {
+                "0": {
+                    "name": "punctuation.definition.block"
+                }
+            },
+            "name": "meta.block",
+            "patterns": [
+                {
+                    "include": "#expression"
+                }
+            ]
+        },
+        "string-single": {
+            "begin": "\\'",
+            "end": "\\'",
+            "beginCaptures": {
+                "0": {
+                    "name": "punctuation.definition.block"
+                }
+            },
+            "endCaptures": {
+                "0": {
+                    "name": "punctuation.definition.block"
+                }
+            },
+            "name": "string.quoted.single"
+        },
+        "string-double": {
+            "begin": "\\\"",
+            "end": "\\\"",
+            "beginCaptures": {
+                "0": {
+                    "name": "punctuation.definition.block"
+                }
+            },
+            "endCaptures": {
+                "0": {
+                    "name": "punctuation.definition.block"
+                }
+            },
+            "name": "string.quoted.double"
+        },
+        "array": {
+            "begin": "\\[",
+            "end": "\\]",
+            "beginCaptures": {
+                "0": {
+                    "name": "meta.brace.square"
+                }
+            },
+            "endCaptures": {
+                "0": {
+                    "name": "meta.brace.square"
+                }
+            },
+            "name": "meta.array",
+            "patterns": [
+                {
+                    "include": "#expression"
+                }
+            ]
+        }
+    }
+}

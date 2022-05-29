@@ -5,20 +5,29 @@
 	"version": "0.2.0",
 	"configurations": [
 		{
-			"type": "mock",
+			"type": "golfscript",
 			"request": "launch",
-			"name": "Debug readme.md",
-			"program": "${workspaceFolder}/readme.md",
+			"name": "Debug",
+			"program": "${workspaceFolder}/test.gs",
 			"stopOnEntry": true,
 			"trace": false
 		},
 		{
-			"type": "mock",
-			"request": "attach",
-			"name": "Attach readme.md",
-			"program": "${workspaceFolder}/readme.md",
-			"stopOnEntry": true,
+			"type": "python",
+			"request": "launch",
+			"name": "Server",
+			"program": "${workspaceFolder}/../../../golfscript/gs_server.py",
+			"stopOnEntry": false,
 			"trace": false
+		}
+	],
+	"compounds": [
+		{
+			"name": "Server/Debugger",
+			"configurations": [
+				"Server",
+				"Debug"
+			]
 		}
 	]
 }
